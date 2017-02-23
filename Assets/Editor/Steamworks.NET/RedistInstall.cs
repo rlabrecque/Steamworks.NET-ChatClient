@@ -1,4 +1,8 @@
-// Uncomment this out to disable copying
+// This file is provided under The MIT License as part of Steamworks.NET.
+// Copyright (c) 2013-2017 Riley Labrecque
+// Please see the included LICENSE.txt for additional information.
+
+// Uncomment this out or add it to your custom platform defines to disable checking the plugin platform settings.
 //#define DISABLEPLATFORMSETTINGS
 
 using UnityEngine;
@@ -62,13 +66,18 @@ public class RedistInstall {
 			Debug.Log(string.Format("[Steamworks.NET] Successfully copied {0} into the project root. Please relaunch Unity.", filename));
 		}
 		else {
-			Debug.LogWarning(string.Format("[Steamworks.NET] Could not copy {0} into the project root. File.Copy() Failed. Place {0} from the Steamworks SDK in the project root manually.", filename));
+			Debug.LogWarning(string.Format("[Steamworks.NET] Could not copy {0} into the project root. File.Copy() Failed. Please copy {0} into the project root manually.", Path.Combine(path, filename)));
 		}
 	}
 
 #if UNITY_5
 	static void SetPlatformSettings() {
 		foreach(var plugin in PluginImporter.GetAllImporters()) {
+			// Skip any null plugins, why is this a thing?!
+			if(plugin == null) {
+				continue;
+			}
+
 			// Skip any absolute paths, as they are only builtin plugins.
 			if(Path.IsPathRooted(plugin.assetPath)) {
 				continue;

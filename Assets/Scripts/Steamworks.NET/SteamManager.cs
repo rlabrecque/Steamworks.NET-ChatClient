@@ -1,9 +1,9 @@
 // The SteamManager is designed to work with Steamworks.NET
 // This file is released into the public domain.
 // Where that dedication is not recognized you are granted a perpetual,
-// irrevokable license to copy and modify this files as you see fit.
+// irrevokable license to copy and modify this file as you see fit.
 //
-// Version: 1.0.2
+// Version: 1.0.5
 
 using UnityEngine;
 using System.Collections;
@@ -13,13 +13,21 @@ using Steamworks;
 // The SteamManager provides a base implementation of Steamworks.NET on which you can build upon.
 // It handles the basics of starting up and shutting down the SteamAPI for use.
 //
-class SteamManager : MonoBehaviour {
+[DisallowMultipleComponent]
+public class SteamManager : MonoBehaviour {
 	private static SteamManager s_instance;
 	private static SteamManager Instance {
 		get {
-			return s_instance ?? new GameObject("SteamManager").AddComponent<SteamManager>();
+			if (s_instance == null) {
+				return new GameObject("SteamManager").AddComponent<SteamManager>();
+			}
+			else {
+				return s_instance;
+			}
 		}
 	}
+
+	private static bool s_EverInialized;
 
 	private bool m_bInitialized;
 	public static bool Initialized {
@@ -41,6 +49,14 @@ class SteamManager : MonoBehaviour {
 		}
 		s_instance = this;
 
+		if(s_EverInialized) {
+			// This is almost always an error.
+			// The most common case where this happens is when SteamManager gets destroyed because of Application.Quit(),
+			// and then some Steamworks code in some other OnDestroy gets called afterwards, creating a new SteamManager.
+			// You should never call Steamworks functions in OnDestroy, always prefer OnDisable if possible.
+			throw new System.Exception("Tried to Initialize the SteamAPI twice in one session!");
+		}
+
 		// We want our SteamManager Instance to persist across scenes.
 		DontDestroyOnLoad(gameObject);
 
@@ -53,13 +69,13 @@ class SteamManager : MonoBehaviour {
 		}
 
 		try {
-			// If Steam is not running or the game wasn't started through Steam, SteamAPI_RestartAppIfNecessary starts the 
+			// If Steam is not running or the game wasn't started through Steam, SteamAPI_RestartAppIfNecessary starts the
 			// Steam client and also launches this game again if the User owns it. This can act as a rudimentary form of DRM.
 
 			// Once you get a Steam AppID assigned by Valve, you need to replace AppId_t.Invalid with it and
 			// remove steam_appid.txt from the game depot. eg: "(AppId_t)480" or "new AppId_t(480)".
 			// See the Valve documentation for more information: https://partner.steamgames.com/documentation/drm#FAQ
-			if (SteamAPI.RestartAppIfNecessary(new AppId_t(480))) {
+			if (SteamAPI.RestartAppIfNecessary(AppId_t.Invalid)) {
 				Application.Quit();
 				return;
 			}
@@ -76,6 +92,8 @@ class SteamManager : MonoBehaviour {
 		// Steam Client is not running.
 		// Launching from outside of steam without a steam_appid.txt file in place.
 		// Running under a different OS User or Access level (for example running "as administrator")
+		// Ensure that you own a license for the AppId on your active Steam account
+		// If your AppId is not completely set up. Either in Release State: Unavailable, or if it's missing default packages.
 		// Valve's documentation for this is located here:
 		// https://partner.steamgames.com/documentation/getting_started
 		// https://partner.steamgames.com/documentation/example // Under: Common Build Problems
@@ -89,6 +107,8 @@ class SteamManager : MonoBehaviour {
 
 			return;
 		}
+
+		s_EverInialized = true;
 	}
 
 	// This should only ever get called on first load and after an Assembly reload, You should never Disable the Steamworks Manager yourself.
