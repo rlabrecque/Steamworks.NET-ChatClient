@@ -16,12 +16,24 @@ public class SteamChatClient : MonoBehaviour {
 	}
 	EChatClientState m_ChatClientState = EChatClientState.Init;
 
+    struct LobbyMetaData
+    {
+        public string m_Key;
+        public string m_Value;
+    }
+
+    struct LobbyMembers
+    {
+        public CSteamID m_SteamID;
+        public LobbyMetaData[] m_Data;
+    }
+
 	struct Lobby {
 		public CSteamID m_SteamID;
-		public int m_MemberCount;
-		public int m_MemberLimit;
-		public string[] m_DataKeys;
-		public string[] m_DataValues;
+		public CSteamID m_Owner;
+        public LobbyMembers[] m_Members;
+        public int m_MemberLimit;
+		public LobbyMetaData[] m_Data;
 	}
 
 	CallResult<LobbyEnter_t> m_LobbyEnterCallResult;
@@ -115,21 +127,33 @@ public class SteamChatClient : MonoBehaviour {
 					newRectT.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Top, i * itemRectT.rect.height, itemRectT.rect.height);
 
 					Text text = m_items[i].GetComponentInChildren<Text>();
-					text.text = i + " - SteamID: " + m_Lobbies[i].m_SteamID.ToString() + " - Players: " + m_Lobbies[i].m_MemberCount + "/" + m_Lobbies[i].m_MemberLimit;
+					text.text = i + " - SteamID: " + m_Lobbies[i].m_SteamID.ToString() + " - Players: " + m_Lobbies[i].m_Members.Length + "/" + m_Lobbies[i].m_MemberLimit;
 
 					Button button = m_items[i].GetComponentInChildren<Button>();
 					int ThisIsDumb = i;
 					button.onClick.AddListener(delegate {
 						m_CurrentlySelected = ThisIsDumb;
 						System.Text.StringBuilder test = new System.Text.StringBuilder();
-						for (int j = 0; j < m_Lobbies[m_CurrentlySelected].m_DataKeys.Length; ++j) {
-							test.Append(m_Lobbies[m_CurrentlySelected].m_DataKeys[j]);
-							test.Append(":");
-							test.Append(m_Lobbies[m_CurrentlySelected].m_DataValues[j]);
-							test.Append(", ");
+                        test.Append("Lobby Data list:\n");
+						for (int j = 0; j < m_Lobbies[m_CurrentlySelected].m_Data.Length; ++j) {
+							test.Append(m_Lobbies[m_CurrentlySelected].m_Data[j].m_Key);
+							test.Append(" - ");
+							test.Append(m_Lobbies[m_CurrentlySelected].m_Data[j].m_Value);
+							test.Append("\n");
 						}
 
-						m_ServerInfoText.text = test.ToString();
+                        test.Append("Members list:\n");
+                        for (int j = 0; j < m_Lobbies[m_CurrentlySelected].m_Members.Length; ++j)
+                        {
+                            test.Append(j);
+                            test.Append(". ");
+                            test.Append(m_Lobbies[m_CurrentlySelected].m_Members[j].m_SteamID);
+                            test.Append(" - ");
+                            test.Append(SteamFriends.GetFriendPersonaName(m_Lobbies[m_CurrentlySelected].m_Members[j].m_SteamID));
+                            test.Append("\n");
+                        }
+
+                        m_ServerInfoText.text = test.ToString();
 						
 						m_JoinButton.interactable = true;
 					});
@@ -149,7 +173,7 @@ public class SteamChatClient : MonoBehaviour {
 				m_StatusText.text = "Failed To Join...";
 				break;
 			case EChatClientState.InLobby:
-				m_InLobbyStatusText.text = "SteamID: " + m_CurrentLobby.m_SteamID.ToString() + " - Slots: " + m_CurrentLobby.m_MemberCount + "/" + m_CurrentLobby.m_MemberLimit;
+				m_InLobbyStatusText.text = "SteamID: " + m_CurrentLobby.m_SteamID.ToString() + " - Slots: " + m_CurrentLobby.m_Members.Length + "/" + m_CurrentLobby.m_MemberLimit;
 				m_LobbyListPanel.SetActive(false);
 				m_LobbyPanel.SetActive(true);
 				m_ChatText.text = "";
@@ -301,7 +325,7 @@ public class SteamChatClient : MonoBehaviour {
 		}
 		
 		m_CurrentLobby.m_SteamID = (CSteamID)pCallback.m_ulSteamIDLobby;
-		m_CurrentLobby.m_MemberCount = SteamMatchmaking.GetNumLobbyMembers(m_CurrentLobby.m_SteamID);
+		m_CurrentLobby.m_Members = new LobbyMembers[SteamMatchmaking.GetNumLobbyMembers(m_CurrentLobby.m_SteamID)];
 		m_CurrentLobby.m_MemberLimit = SteamMatchmaking.GetLobbyMemberLimit(m_CurrentLobby.m_SteamID);
 
 		ChangeState(EChatClientState.InLobby);
@@ -344,9 +368,7 @@ public class SteamChatClient : MonoBehaviour {
 
 		m_Lobbies = new Lobby[pCallback.m_nLobbiesMatching];
 		for (int i = 0; i < pCallback.m_nLobbiesMatching; ++i) {
-			m_Lobbies[i].m_SteamID = SteamMatchmaking.GetLobbyByIndex(i);
-			m_Lobbies[i].m_MemberCount = SteamMatchmaking.GetNumLobbyMembers(m_Lobbies[i].m_SteamID);
-			m_Lobbies[i].m_MemberLimit = SteamMatchmaking.GetLobbyMemberLimit(m_Lobbies[i].m_SteamID);
+            UpdateLobbyInfo(SteamMatchmaking.GetLobbyByIndex(i), ref m_Lobbies[i]);
 
 			/*uint IP;
 			ushort Port;
@@ -356,21 +378,6 @@ public class SteamChatClient : MonoBehaviour {
 			print("Port: " + Port);
 			print("GSID: " + GameServerSteamID);*/
 
-			int nDataCount = SteamMatchmaking.GetLobbyDataCount(m_Lobbies[i].m_SteamID);
-			m_Lobbies[i].m_DataKeys = new string[nDataCount];
-			m_Lobbies[i].m_DataValues = new string[nDataCount];
-			for(int j = 0; j < nDataCount; ++j) {
-				string key;
-				string value;
-				bool lobbyDataRet = SteamMatchmaking.GetLobbyDataByIndex(m_Lobbies[i].m_SteamID, j, out key, 255, out value, 255);
-				if(!lobbyDataRet) {
-					Debug.LogError("SteamMatchmaking.GetLobbyDataByIndex returned false.");
-					continue;
-				}
-
-				m_Lobbies[i].m_DataKeys[j] = key;
-				m_Lobbies[i].m_DataValues[j] = value;
-			}
 		}
 
 		ChangeState(EChatClientState.DisplayResults);
@@ -388,10 +395,8 @@ public class SteamChatClient : MonoBehaviour {
 		}
 
 		Debug.Log("[" + LobbyCreated_t.k_iCallback + " - LobbyCreated] - " + pCallback.m_eResult + " -- " + pCallback.m_ulSteamIDLobby);
-		
-		m_CurrentLobby.m_SteamID = (CSteamID)pCallback.m_ulSteamIDLobby;
-		m_CurrentLobby.m_MemberCount = SteamMatchmaking.GetNumLobbyMembers(m_CurrentLobby.m_SteamID);
-		m_CurrentLobby.m_MemberLimit = SteamMatchmaking.GetLobbyMemberLimit(m_CurrentLobby.m_SteamID);
+
+        UpdateLobbyInfo((CSteamID)pCallback.m_ulSteamIDLobby, ref m_CurrentLobby);
 
 		ChangeState(EChatClientState.InLobby);
 	}
@@ -399,4 +404,25 @@ public class SteamChatClient : MonoBehaviour {
 	void OnFavoritesListAccountsUpdated(FavoritesListAccountsUpdated_t pCallback) {
 		Debug.Log("[" + FavoritesListAccountsUpdated_t.k_iCallback + " - FavoritesListAccountsUpdated] - " + pCallback.m_eResult);
 	}
+
+    void UpdateLobbyInfo( CSteamID steamIDLobby, ref Lobby outLobby )
+    {
+        outLobby.m_SteamID = steamIDLobby;
+        outLobby.m_Owner = SteamMatchmaking.GetLobbyOwner( steamIDLobby );
+        outLobby.m_Members = new LobbyMembers[SteamMatchmaking.GetNumLobbyMembers(steamIDLobby)];
+        outLobby.m_MemberLimit = SteamMatchmaking.GetLobbyMemberLimit(steamIDLobby);
+
+        int nDataCount = SteamMatchmaking.GetLobbyDataCount(steamIDLobby);
+        outLobby.m_Data = new LobbyMetaData[nDataCount];
+        for (int i = 0; i < nDataCount; ++i)
+        {
+            bool lobbyDataRet = SteamMatchmaking.GetLobbyDataByIndex(steamIDLobby, i, out outLobby.m_Data[i].m_Key, Constants.k_nMaxLobbyKeyLength, out outLobby.m_Data[i].m_Value, Constants.k_cubChatMetadataMax);
+            if (!lobbyDataRet)
+            {
+                Debug.LogError("SteamMatchmaking.GetLobbyDataByIndex returned false.");
+                continue;
+            }
+
+        }
+    }
 }

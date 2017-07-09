@@ -7,4 +7,4 @@ This particular sample is somewhat half baked but shows the basics of using the 
 
 This sample is available in the public domain (where acceptable.) Please view [LICENSE.txt](LICENSE.txt) for more details.
 
-This project was built with Unity 5.5.1. As such it is only expected to build and run without issue on that version or later.
+This project is usually built using the latest version of Unity. As such it is only expected to build and run out of the box on the version specified in [ProjectVersion.txt](ProjectSettings/ProjectVersion.txt) or newer.
